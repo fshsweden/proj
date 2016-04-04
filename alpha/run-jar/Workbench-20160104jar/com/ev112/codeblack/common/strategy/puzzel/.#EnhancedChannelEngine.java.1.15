@@ -1,0 +1,383 @@
+package com.ev112.codeblack.common.strategy.puzzel;
+
+import java.text.NumberFormat;
+import java.text.SimpleDateFormat;
+import java.util.LinkedList;
+import java.util.ListIterator;
+
+import org.apache.commons.math3.stat.regression.SimpleRegression;
+
+import com.ev112.codeblack.common.dataengine.DataEngineCallbackInterface.DATA_QUALITY;
+import com.ev112.codeblack.common.feed.objects.FeedTrade;
+import com.ev112.codeblack.common.instmodel.Instrument;
+import com.ev112.codeblack.common.strategy.strategies.tpStat.TrendType;
+
+public class EnhancedChannelEngine extends AbstractChannelEngine {
+	private static final boolean			sDebug						= true;
+	private static final SimpleDateFormat	sSDF						= new SimpleDateFormat("HH:mm:ss.SSS");
+
+	private enum LogLevel {TRACE, DEBUG, INFO, WARNING, ERROR};
+	
+	private long							mParamIntervalInSec;
+	private final double					mParamMaxChannelPercentSpread;
+	private final double					mParamMinChannelPercentSpread;
+	private int								mParamMaxChannelTickSpread	= Integer.MIN_VALUE;
+	private int								mParamMinChannelTickSpread	= Integer.MIN_VALUE;
+	private double							mParamMaxPriceChange;												// % price change per hour
+	private double							mParamMinPriceChange;												// % price change per hour
+	private double							mParamChannelSafetyPercentage;
+	private int								mParamMinTradesInChannel;
+	private long							mParamMinTimeBetweenNewChannelsInSec;
+	private LinkedList<FeedTrade>			mTrades;
+	private boolean							mChannelActive;
+	private Instrument						mInstrument;
+	private double							mCurrentMaxSpread;
+	private SimpleRegression				mCurrentRegression;
+	private long							mFirstTradeTime				= 0;
+	private ChannelCallback					mCallback;
+	private long							mLastBreakOutTime			= 0;
+	private NumberFormat					mNumFmt;
+	private String							mSymbol;
+	private Object							mUserCallbackObject;
+	private double							mFirstPrice					= Double.NaN;
+	private double							mTickSize					= Double.NaN;
+	
+	private LogLevel					currentLevel = LogLevel.WARNING;
+	
+
+	/**
+	 * 
+	 * @param pInstrument
+	 * @param pCallback
+	 * @param pParamIntervalInSec
+	 * @param pParamMaxChannelPercentSpread
+	 * @param pParamMinChannelPercentSpread
+	 * @param pParamMaxPriceChange
+	 * @param pParamMinPriceChange
+	 * @param pParamMinTimeBetweenNewChannelsInSec
+	 * @param pParamMinTradesInChannel
+	 * @param pParamChannelSafetyPercentage
+	 */
+	public EnhancedChannelEngine(
+		Instrument pInstrument,
+		ChannelCallback pCallback,
+		long pParamIntervalInSec,
+		double pParamMaxChannelPercentSpread,
+		double pParamMinChannelPercentSpread,
+		double pParamMaxPriceChange,
+		double pParamMinPriceChange,
+		long pParamMinTimeBetweenNewChannelsInSec,
+		int pParamMinTradesInChannel,
+		double pParamChannelSafetyPercentage)
+	{
+		mSymbol = pInstrument.getSymbol();
+		mInstrument = pInstrument;
+		mChannelActive = false;
+		mCallback = pCallback;
+		mNumFmt = NumberFormat.getInstance();
+		mNumFmt.setMaximumFractionDigits(2);
+		mNumFmt.setMinimumFractionDigits(2);
+		mNumFmt.setGroupingUsed(false);
+		mTrades = new LinkedList<FeedTrade>();
+
+		mParamMaxChannelPercentSpread = pParamMaxChannelPercentSpread;
+		mParamMinChannelPercentSpread = pParamMinChannelPercentSpread;
+
+		this.mParamChannelSafetyPercentage = pParamChannelSafetyPercentage;
+		this.mParamIntervalInSec = pParamIntervalInSec;
+		this.mParamMaxPriceChange = pParamMaxPriceChange;
+		this.mParamMinPriceChange = pParamMinPriceChange;
+		this.mParamMinTimeBetweenNewChannelsInSec = pParamMinTimeBetweenNewChannelsInSec;
+		this.mParamMinTradesInChannel = pParamMinTradesInChannel;
+	}
+
+	public double getChannelSpread() {
+		return mCurrentMaxSpread;
+	}
+
+	public SimpleRegression getRegression() {
+		return mCurrentRegression;
+	}
+
+	private void trimTrades(long pCurrentTime) {
+		FeedTrade tTrade = null;
+		while (mTrades.size() > 0) {
+			tTrade = mTrades.peek();
+			if ((tTrade.getTimestamp() + (mParamIntervalInSec * 1000L)) < pCurrentTime) {
+				mTrades.removeFirst();
+			} else {
+				return;
+			}
+		}
+	}
+
+	@Override
+	public double getPriceRoof(long pNow) {
+		if (!mChannelActive) {
+			return Double.NaN;
+		}
+		double tPrice = mCurrentRegression.predict(pNow) + (mCurrentMaxSpread / 2.0d);
+		return tPrice;
+	}
+
+	@Override
+	public double getPredictedPrice(long pNow) {
+		if (!mChannelActive) {
+			return Double.NaN;
+		}
+		double tPrice = mCurrentRegression.predict(pNow);
+		return tPrice;
+	}
+
+	@Override
+	public double getPriceFloor(long pNow) {
+		if (!mChannelActive) {
+			return Double.NaN;
+		}
+		double tPrice = mCurrentRegression.predict(pNow) - (mCurrentMaxSpread / 2.0d);
+		return tPrice;
+	}
+
+	private void checkIfStillWithinChannel(long pNowTime) {
+
+		if (!mChannelActive) {
+			// System.out.println("validateChannel - RETURN, not in channel right now");
+			return;
+		}
+
+		FeedTrade tTrade = mTrades.peekLast();
+		TrendType tTrendDirection = (mCurrentRegression.getSlope() > 0) ? TrendType.UP : TrendType.DOWN;
+		// TODO: Get angle?
+		// System.out.println("/|\\ TREND IS " + tTrendDirection.name());
+		double tPrice = mCurrentRegression.predict(tTrade.getTimestamp());
+
+		mCallback.channelStateInfo(new ChannelInfo(tTrade.getTimestamp(), (tPrice + (mCurrentMaxSpread / 2.0d)), (tPrice - (mCurrentMaxSpread / 2.0d))));
+		
+		/**
+		 * Check that the last trade has not broken through the upper band
+		 */
+		//System.out.println("Current Max Spread " + mCurrentMaxSpread);
+		//System.out.println("Comparing Price For UP break " + tTrade.getPrice() + " with Predicted " + String.format("%1.2f",tPrice) + " add half spread to that:" + String.format("%1.2f",(mCurrentMaxSpread / 2.0d))
+		//		+ " = " + String.format("%1.2f", (tPrice + (mCurrentMaxSpread / 2.0d))));
+		if (tTrade.getPrice() > (tPrice + (mCurrentMaxSpread / 2.0d))) {
+
+			if (sDebug) {
+				System.out.println(sSDF.format(tTrade.getTimestamp()) + "  [ChannelBreakOut] symbol: " + mSymbol + " price: " + tTrade.getPrice() + " pre-price: " + mNumFmt.format(tPrice) + " Spread/2: " + (mCurrentMaxSpread / 2.0d) + " breakout direction: UP");
+			}
+			mLastBreakOutTime = tTrade.getTimestamp();
+
+			mCallback.channelBreakOut(mCurrentRegression, tTrade.getTimestamp(), tTrendDirection, TrendType.UP, tTrade.getPrice(), mUserCallbackObject, tTrade);
+			
+			//System.out.println("<<< ChannelActive is now FALSE >>>");
+			this.mChannelActive = false;
+			this.mCurrentMaxSpread = 0;
+			this.mCurrentRegression = null;
+			return;
+		}
+
+		/**
+		 * Check that the last trade has not broken through the lower band
+		 */
+		tPrice = mCurrentRegression.predict(tTrade.getTimestamp());
+		//System.out.println("Comparing Trade For DOWN break " + tTrade.getPrice() + " with Predicted " + String.format("%1.2f",tPrice) + " subtract half spread to that:" + String.format("%1.2f",(mCurrentMaxSpread / 2.0d)) + " = " + String.format("%1.2f", (tPrice - (mCurrentMaxSpread / 2.0d))));
+		if (tTrade.getPrice() < (tPrice - (mCurrentMaxSpread / 2.0d))) {
+
+			if (sDebug) {
+				System.out.println(sSDF.format(tTrade.getTimestamp()) + "  [ChannelBreakOut] symbol: " + mSymbol + " price: " + tTrade.getPrice() + " pre-price: " + mNumFmt.format(tPrice) + " Spread/2: " + (mCurrentMaxSpread / 2.0d) + " breakout direction: DOWN");
+			}
+			mLastBreakOutTime = tTrade.getTimestamp();
+			mCallback.channelBreakOut(mCurrentRegression, tTrade.getTimestamp(), tTrendDirection, TrendType.DOWN, tTrade.getPrice(), mUserCallbackObject, tTrade);
+			//System.out.println("<<< ChannelActive is now FALSE >>>");
+			this.mChannelActive = false;
+			this.mCurrentMaxSpread = 0;
+			this.mCurrentRegression = null;
+			return;
+		}
+	}
+
+	// public double predictPrice( long pTimestamp ) {
+	// return mCurrentRegression.predict( pTimestamp );
+	// }
+	//
+	private void checkIfWeHaveEnteredChannel() {
+		
+		if (mTrades.size() == 0) {
+			// System.out.println("00:00:00.000 [ChannelSearc] no trades in trade list");
+		}
+
+		long tNow = mTrades.peekLast().getTimestamp();
+
+		if (mTrades.size() < mParamMinTradesInChannel) {
+			System.out.println( sSDF.format(tNow) + " [ChannelSearc] not enough trades (" + mTrades.size() + ")");
+			return; // not enough data
+		}
+
+		FeedTrade tTrade = null;
+		ListIterator<FeedTrade> tItr = mTrades.listIterator();
+		double tMaxPrice = Double.MIN_VALUE;
+		double tMinPrice = Double.MAX_VALUE;
+		long tMinTime = 0, tMaxTime = 0;
+		
+		SimpleRegression tRegression = new SimpleRegression();
+
+		//System.out.println("Scanning all trades....");
+		double tPriceSum = 0;
+		while (tItr.hasNext()) {
+			tTrade = tItr.next();
+			tRegression.addData(tTrade.getTimestamp(), tTrade.getPrice());
+			tPriceSum += tTrade.getPrice(); // TODO: used for....?
+			if (tMaxPrice < tTrade.getPrice()) {
+				tMaxPrice = tTrade.getPrice();
+				tMaxTime = tTrade.getTimestamp();
+			}
+			if (tMinPrice > tTrade.getPrice()) {
+				tMinPrice = tTrade.getPrice();
+				tMinTime = tTrade.getTimestamp();
+			}
+		}
+		// System.out.println("calculateChannel() : minprice: " + tMinPrice + " maxprice:" + tMaxPrice + " maxtime:" + tMaxTime);
+
+		/**
+		 * Check that the min / max price is with the defined channel area
+		 */
+		double tPrice = tRegression.predict(tMaxTime);
+		double tMaxDiff = tMaxPrice - tPrice;
+
+		// System.out.println("Predicted price:" + tPrice);
+		//System.out.println("MaxDiff : " + tMaxDiff + " " + tMaxPrice + "=" + tPrice);
+		
+		if (tMaxPrice > (tPrice + ((double) mParamMaxChannelTickSpread * mTickSize) / 2.0d)) {
+//			System.out.println(sSDF.format(tNow) + " [calculateChannel] max price outside spread ");
+			return; // max price outside channel boundaries
+		}
+
+		tPrice = tRegression.predict(tMinTime);
+		double tMinDiff = tPrice - tMinPrice;
+		if (tMinPrice < (tPrice - ((double) mParamMaxChannelTickSpread * mTickSize) / 2.0d)) {
+//			System.out.println( sSDF.format(tNow) + " [calculateChannel] min price outside spread ");
+			return; // min price outside channel boundaries
+		}
+
+		/**
+		 * Check that the channel is fairly horizontal
+		 */
+		double tFirstPredPrice = tRegression.predict(mTrades.peekFirst().getTimestamp());
+		double tLastPredPrice = tRegression.predict(mTrades.peekLast().getTimestamp());
+
+		//System.out.println("First pred price:" + tFirstPredPrice + " Last pred price:" + tLastPredPrice);
+		
+		double tPriceChange = Math.abs(tFirstPredPrice - tLastPredPrice);
+		long tTimeDiffInSec = (mTrades.getLast().getTimestamp() - mTrades.peekFirst().getTimestamp()) / 1000L;
+		double tTimeDiffHours = (double) tTimeDiffInSec / 3600.0d;
+		double tChangPerHour = ((tPriceChange / tFirstPredPrice) / tTimeDiffHours) * 100.0d;
+		
+		//System.out.println("Stats: PriceChange:" + new Double(tPriceChange) + " DiffSec:" + tTimeDiffInSec + " DiffHr:" + tTimeDiffHours + " ChgPerHour:" + tChangPerHour);
+
+		if (tChangPerHour > mParamMaxPriceChange) {
+			// System.out.println( sSDF.format(tNow) + " [calculateChannel] too large price change per hour (" + tChangPerHour + ") > " + mParamMaxPriceChange );
+			return;
+		}
+
+		if (tChangPerHour < mParamMinPriceChange) {
+			// System.out.println( sSDF.format(tNow) + " [calculateChannel] too small price change per hour (" + tChangPerHour + ") < " + mParamMinPriceChange );
+			return;
+		}
+
+		/**
+		 * Check that defined channel spread exceeds the min channel spread
+		 */
+
+		/**
+		 * Check that last new channel callback was not within the the min interval
+		 */
+		long tNewChanTimeDiff = tNow - mLastBreakOutTime;
+		//System.out.println("NewChanTimeDiff:" + tNewChanTimeDiff);
+		if (tNewChanTimeDiff < (mParamMinTimeBetweenNewChannelsInSec * 1000L)) {
+//			System.out.println( sSDF.format(tNow) + " [calculateChannel] new event to close to previous new channel event, diff: " + tNewChanTimeDiff + " ms.");
+			return;
+		}
+
+		/**
+		 * Define the channel based upon the actual max/min values
+		 */
+		double tRealChanSpread = ((Math.max(tMaxDiff, tMinDiff) + (mParamChannelSafetyPercentage * mFirstPrice)) * 2.0d);
+		//System.out.println("RealChanSpread:" + tRealChanSpread);
+		
+		if (tRealChanSpread > (mParamMaxChannelTickSpread * mTickSize)) {
+			this.mCurrentMaxSpread = (mParamMaxChannelTickSpread * mTickSize);
+		} 
+		else {
+			this.mCurrentMaxSpread = tRealChanSpread;
+		}
+		
+		//System.out.println("CALCULATED MAX SPREAD:" + String.format("%1.2f", mCurrentMaxSpread));
+
+		if (mCurrentMaxSpread < (mParamMinChannelTickSpread * mTickSize)) {
+//			 System.out.println( sSDF.format(tNow) + " [calculateChannel] channel spread too narrow, min: " + tMinPrice + " max: " + tMaxPrice
+//					 + " spread: " + mCurrentMaxSpread +
+//					 " max spread: " + (mParamMaxChannelTickSpread * mTickSize) + " min diff: " + tMinDiff + " max diff: " + tMaxDiff );
+			return;
+		}
+
+		mChannelActive = true;
+		mCurrentRegression = tRegression;
+
+		/**
+		 * Notify callback
+		 */
+		if (true && sDebug) {
+			System.out.println(sSDF.format(mTrades.peekFirst().getTimestamp()) + "  [NewChannel] symbol: " + mSymbol + " first time " + sSDF.format(mTrades.peekFirst().getTimestamp()) + " first price: " + mNumFmt.format(tRegression.predict(mTrades.peekFirst().getTimestamp()))
+					+ " last time " + sSDF.format(mTrades.peekLast().getTimestamp()) + " last price: " + mNumFmt.format(tRegression.predict(mTrades.peekLast().getTimestamp())) + " timediff: " + tTimeDiffInSec + " (sec)" + " chan spread: " + mCurrentMaxSpread + " slope: "
+					+ mCurrentRegression.getSlope());
+		}
+
+		mUserCallbackObject = mCallback.channelCreated(mCurrentRegression, mTrades.peekFirst().getTimestamp(), tRegression.predict(mTrades.peekFirst().getTimestamp()), mTrades.peekLast().getTimestamp(), tRegression.predict(mTrades.peekLast().getTimestamp()), mCurrentMaxSpread);
+	}
+
+	@Override
+	public void addTrade(long pTimestamp, FeedTrade pFeedTrade) {
+		
+		if (Double.isNaN(mFirstPrice)) {
+			mFirstPrice = pFeedTrade.getPrice();
+			mTickSize = mInstrument.getTickSize(mFirstPrice);
+
+			// Min and max have not been set up. Calculate based on percentage value and
+			// the trade price of the first trade of the day
+			mParamMaxChannelTickSpread = (int) (mInstrument.tickify(mFirstPrice * mParamMaxChannelPercentSpread, true) / mTickSize);
+			mParamMinChannelTickSpread = (int) (mInstrument.tickify(mFirstPrice * mParamMinChannelPercentSpread, true) / mTickSize);
+		}
+
+		FeedTrade tTrade = pFeedTrade.feed2Public(DATA_QUALITY.NORMAL);
+		mTrades.add(tTrade);
+		trimTrades(pTimestamp);
+
+		if (mFirstTradeTime == 0) {
+			mFirstTradeTime = pTimestamp;
+		}
+
+		if ((!mChannelActive) && ((mFirstTradeTime + (mParamIntervalInSec * 1000L)) < pTimestamp)) {
+			checkIfWeHaveEnteredChannel();
+		}
+
+		if (mChannelActive) {
+			checkIfStillWithinChannel(pFeedTrade.getTimestamp());
+		}
+	}
+
+	@Override
+	public void clockPulse(long timestamp) {
+		// Not needed
+	}
+
+	private void log(String s) {
+		log(LogLevel.INFO, s);
+	}
+	
+	private void log(LogLevel level, String s) {
+		long tNow = System.currentTimeMillis();
+		
+		if (level.ordinal() >= currentLevel.ordinal()) {
+			System.out.println(sSDF.format(tNow) + " " + s);
+		}
+	}
+}

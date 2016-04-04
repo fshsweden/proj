@@ -1,0 +1,702 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Messages>
+	<Message name="RequestMessage">
+		<Attribute name="requestHandle" type="int"/>
+		<Attribute name="reserved"  type="String"/>
+	</Message>
+
+	<Message name="ResponseMessage">
+		<Attribute name="requestHandle" type="int"/>
+		<Constants>
+			<Constant name="OK" type="int" value="0"/>
+			<Constant name="FAILURE" type="int" value="1"/>
+		</Constants>
+		<Attribute name="statusCode" type="int"/>
+		<Attribute name="statusText" type="String"/>
+	</Message>
+
+	<Message name="UpdateMessage">
+		<Attribute name="requestHandle" type="int"/>
+		<Attribute name="reserved"  type="String"/>
+	</Message>
+	
+	<Message name="NameValuePair">
+		<Attribute name="name" type="String"/>
+		<Attribute name="value" type="String"/>
+		<Attribute name="type" type="String"/>
+		<Attribute name="source" type="String"/>
+		<Code>
+	public NameValuePair(String pName, String pValue, String pType, String pSource) 
+	{
+      setNameValue(pName, pValue, pType, pSource);
+    }
+
+ 	public void setNameValue(String pName, String pValue, String pType, String pSource) 
+ 	{
+		mName = pName;
+        mValue = pValue;
+        mType = pType;
+		mSource = pSource;
+		synchronized (this) {
+            mMessageStringCached = null;
+            mMessageBytesCached = null;
+        }
+    }
+
+ 	public void setNameValue(String pName, String pValue) 
+ 	{
+        mName = pName;
+       	mValue = pValue;
+        mSource = null;
+		mType = null;
+        synchronized (this) 
+        {
+           mMessageStringCached = null;
+		   mMessageBytesCached = null;
+        }
+    }
+	</Code>
+	</Message>
+	
+	
+	<Message name="NameValueList">
+		<Attribute name="attributes" type="NameValuePair" array="[]"/>
+		<Code>
+		    public NameValuePair getNameValuePair( String pName ) {
+    	if (mAttributes == null) {
+    		return null;
+    	}
+    	for( NameValuePair tPair : mAttributes ) {
+    		if (tPair.getName().equals(pName)) {
+    			return tPair;
+    		}
+    	}
+    	return null;
+    }
+    
+    public void addAttribute( NameValuePair pPair ) 
+	{
+		if (mAttributes == null) {
+			mAttributes = new ArrayList&lt;NameValuePair&gt;();
+		}
+		mAttributes.add(pPair);
+	}
+    
+    public String getValue( String pName ) {
+    	if (mAttributes == null) {
+    		return null;
+    	}
+    	for( NameValuePair tPair : mAttributes ) {
+    		if (tPair.getName().equals(pName)) {
+    			return tPair.getValue();
+    		}
+    	}
+    	return null;
+    }
+		</Code>
+	</Message>
+
+
+	<Message name="HistoryBucketRecord">
+		<Imports>
+			<Import path="com.ev112.codeblack.common.utilities.TradingDay"/>
+		</Imports>
+		<Attribute type="String" name="symbol"/>
+		<Attribute type="long" name="timestamp"/>
+		<Attribute type="double" name="low"/>
+		<Attribute type="double" name="high"/>
+		<Attribute type="double" name="price"/> <!-- last price in the bucket / interval -->
+		<Attribute type="int" name="volume"/> <!-- transparent variable, not persistent --> 
+		<Attribute type="long" name="offset"/> <!-- transparent variable, not persistent --> 
+		<Attribute type="TradingDay" name="tradingDay"/>
+		<Code>
+			public HistoryBucketRecord( String pSymbol, long pTimestamp, HistoryBucketRecord pPreviousBucket ) 
+			{
+				mSymbol = pSymbol;
+				mTimestamp = pTimestamp;
+				
+				if ((pPreviousBucket == null) || (Double.isNaN(pPreviousBucket.mPrice)))
+				{
+				  mLow = Double.MAX_VALUE;
+				  mHigh = Double.MIN_VALUE;
+				  mPrice = Double.NaN;	
+				} else {
+				   	mLow = pPreviousBucket.mPrice;
+				   	mHigh = pPreviousBucket.mPrice;
+				   	mPrice = pPreviousBucket.mPrice;
+				}
+			}
+			
+  public void updatePriceAndVolume( double pPrice, int pVolume ) 
+  {
+	  mPrice = pPrice;
+	  mVolume += pVolume;
+	  if (pPrice &gt; mHigh) {
+		  mHigh = pPrice;
+	  }
+	  if (pPrice &lt; mLow) {
+		  mLow = pPrice;
+	  }
+  }
+  
+		</Code>
+	</Message>
+
+
+<!-- 
+=============================================
+== System Messages
+============================================= 
+-->
+	<Message name="HeartBeat" messageId="1">
+		<Attribute name="seqNo" type="long"/>
+		<Attribute name="timeStamp" type="long"/>
+		<Attribute name="system" type="String"/>		<!--  PROD,TEST,STAGE,UNKNOWN? -->
+		<Attribute name="source" type="String"/>		<!-- the server/application that sends the heartbeat -->
+	</Message>
+
+
+<!-- 
+=============================================
+== Price Collector Message Definitions
+============================================= 
+-->
+
+
+	<Message name="PriceCollectorQuerySymbolsTrackedReq" extends="RequestMessage" messageId="100">
+	</Message>
+	
+	<Message name="PriceCollectorQuerySymbolsTrackedRsp" extends="ResponseMessage" messageId="101">
+		<Attribute name="symbols" type="String" array="[]"/>
+	</Message>
+	
+	<Message name="PriceCollectorBdx" extends="UpdateMessage"  messageId="102">
+		<Attribute name="time" type="long"/>
+		<Attribute name="symbol" type="String"/>
+		<Attribute name="replay" type="boolean"/>
+		<Attribute name="replaystate" type="int"/>
+		<Attribute name="toTxLog" type="boolean"/>
+	</Message>
+
+
+
+
+
+
+// CHECK!!!	
+	<Message name="PriceCollectorSubscribeReq" extends="RequestMessage" messageId="103">
+		<Constants>
+			<Constant type="int" name="FLOW_ALL" value ="0"/>
+			<Constant type="int" name="FLOW_TRADES" value ="1"/>
+			<Constant type="int" name="FLOW_QUOTES" value ="2"/>
+			<Constant type="int" name="FLOW_ORDERDEPTHS" value ="4"/>
+		</Constants>
+		<Attribute name="symbol" type="String"/>
+		<Attribute name="flows" type="int"/>
+		<Attribute name="ignoreReplay" type="boolean"/>
+	</Message>
+	
+	<!--  TODO: NOONE IS SENDING THIS ONE - REMOVE OR SWAP WITH THE ONE BELOW! -->
+	<Message name="PriceCollectorSubscribeRsp" extends="ResponseMessage" messageId="104">
+	</Message>
+	
+	<Message name="PriceCollectorAddSubscriptionRsp" extends="ResponseMessage" messageId="110">
+		<Attribute name="symbol" type="String"/>
+	</Message>
+	
+	
+	
+	<Message name="PriceCollectorQuoteBdx" extends="PriceCollectorBdx" messageId="105">
+		<Attribute name="bid" type="double"/>
+			<Attribute name="bidqty" type="int"/>
+		<Attribute name="ask" type="double"/>
+			<Attribute name="askqty" type="int"/>
+		<Attribute name="high" type="double"/>
+		<Attribute name="low" type="double"/>
+		<Attribute name="totvol" type="double"/>
+		<Attribute name="last" type="double"/>
+			<Attribute name="lastqty" type="int"/>
+	</Message>
+	
+<!-- <Message name="PriceCollectorOrderBookSide">
+		<Attribute name="price" type="double"/>
+		<Attribute name="volume" type="int"/>
+	</Message>
+ -->	
+ 	
+	<Message name="PriceCollectorOrderDepthBdx" extends="PriceCollectorBdx" messageId="106">
+		<Attribute name="bidOrders" type="PriceCollectorOrderBookSide" array="[]"/>
+		<Attribute name="askOrders" type="PriceCollectorOrderBookSide" array="[]"/>
+	</Message>
+	
+	<Message name="PriceCollectorTradeBdx" extends="PriceCollectorBdx" messageId="107">
+		<Constants>
+			<Constant name="PREDEAL" type="int" value="80"/>
+			<Constant name="FINALDEAL" type="int" value="70"/>
+			<Constant name="PRELANDFINALDEAL" type="int" value="66"/>
+			<Constant name="DELETEDEAL" type="int" value="68"/>
+			<Constant name="REVERSEDEAL" type="int" value="82"/>
+			<Constant name="MODIFYDEAL" type="int" value="77"/>
+		</Constants>
+		<Attribute name="price" type="double"/>
+		<Attribute name="volume" type="int"/>
+		<Attribute name="flags" type="int"/>
+		<Attribute name="buyer" type="String"/>
+		<Attribute name="seller" type="String"/>
+		<Attribute name="source" type="String"/>
+	</Message>
+	<!-- updated may 6, 2014 -->
+	<Message name="PriceCollectorClockPulseBdx" extends="PriceCollectorBdx" messageId="108">
+		<Attribute name="market" type="boolean"/>   
+		<Attribute name="connected" type="boolean"/>
+		<Attribute name="BdxReceived" type="int"/>
+	</Message>
+	<Message name="PriceCollectorFacilityBdx" extends="PriceCollectorBdx" messageId="109">
+		<Attribute name="facilityTypes" type="String" array="[]"/>
+	</Message>
+
+
+
+
+
+
+
+
+
+	
+	<Message name="PriceCollectorQueryReferencePriceReq"  extends="RequestMessage" messageId="111">
+	</Message>
+	
+	<Message name="PriceCollectorReferencePrice"  extends="RequestMessage" messageId="112">
+		<Attribute name="price" type="double"/>
+		<Attribute name="symbol" type="String"/>
+	</Message>
+	
+	<Message name="PriceCollectorReferencePriceRsp" extends="ResponseMessage" messageId="113">
+		<Attribute name="time" type="long"/>
+		<Attribute name="refPrices" type="PriceCollectorReferencePrice" array="[]"/>
+	</Message>
+	
+	<Message name="PriceCollectorXMLConfigurationReq"  extends="RequestMessage" messageId="114">
+	</Message>
+	
+	<Message name="PriceCollectorXMLConfigurationRsp" extends="ResponseMessage" messageId="115">
+		<Attribute name="xmlConfiguration" type="String"/>
+	</Message>
+	
+	<!-- updated May 6, 2014 pa -->		
+	<Message name="PriceCollectorConnectionFailureBdx"  extends="UpdateMessage"  messageId="116">
+		<Attribute name="market" type="String"/>
+	</Message>
+	
+	<Message name="PriceCollectorXMLInstrumentModelReq"  messageId="117">
+	</Message>
+	
+	<Message name="PriceCollectorXMLInstrumentModelRsp" extends="ResponseMessage"  messageId="118">
+		<Attribute name="xmlConfiguration" type="String"/>
+	</Message>
+	
+	<!-- updated May 6, 2014 pa -->		
+	<Message name="PriceCollectorInstrumentModelReq"  extends="RequestMessage"  messageId="119">
+		<Attribute name="symbol" type="String"/>
+	</Message>
+	
+	<!-- updated May 6, 2014 pa -->		
+	<Message name="Instrument">
+		<Constants>
+			<Constant type="int" name="INSTRUMENT_STOCK" value="1"/>
+			<Constant type="int" name="INSTRUMENT_CONVERTIBLE" value="2"/>
+			<Constant type="int" name="INSTRUMENT_BOND" value="3"/>
+			<Constant type="int" name="INSTRUMENT_PREMIUM" value="4"/>
+			<Constant type="int" name="INSTRUMENT_OPTION" value="5"/>
+			<Constant type="int" name="INSTRUMENT_FORWARD" value="6"/>
+			<Constant type="int" name="INSTRUMENT_FUTURE" value="7"/>
+			<Constant type="int" name="INSTRUMENT_WARRANT" value="8"/>
+			<Constant type="int" name="INSTRUMENT_COMBINATION" value="9"/>
+			<Constant type="int" name="INSTRUMENT_WORLD_INDEX" value="10"/>
+			<Constant type="int" name="INSTRUMENT_FUND" value="11"/>
+			<Constant type="int" name="INSTRUMENT_EQUITY_WARRANT" value="12"/>
+			<Constant type="int" name="INSTRUMENT_COMMODITY" value="13"/>
+			<Constant type="int" name="INSTRUMENT_TURBO_WARRANT" value="14"/>
+			<Constant type="int" name="INSTRUMENT_SECTOR_INDEX" value="15"/>
+			<Constant type="int" name="INSTRUMENT_INTEREST" value="16"/>
+			<Constant type="int" name="INSTRUMENT_CURRENCY" value="17"/>
+			<Constant type="int" name="INSTRUMENT_EXOTIC_WARRANT" value="18"/>
+			<Constant type="int" name="INSTRUMENT_CERTIFICATE" value="19"/>
+			<Constant type="int" name="INSTRUMENT_SUBSCRIPTION_RIGHT" value="20"/>
+			<Constant type="int" name="INSTRUMENT_FUND_BUNDLE" value="21"/>
+			<Constant type="int" name="INSTRUMENT_TRADING_CURRENCY" value="22"/>
+			<Constant type="int" name="INSTRUMENT_FUND_INDEX" value="23"/>
+			<Constant type="int" name="INSTRUMENT_EXCHANGE_TRADED_FUND" value="24"/>
+		</Constants>
+		<Attribute name="shortName" type="String"/>
+		<Attribute name="id" type="int"/>
+		<Attribute name="isin" type="String"/>
+		<Attribute name="primaryOrderbookId" type="int"/>
+		<Attribute name="type" type="int"/>
+		<Attribute name="active" type="boolean"/>
+		<Attribute name="volumeFactor" type="int"/>
+	</Message>
+	
+	<!-- updated May 6, 2014 pa -->		
+	<Message name="PriceCollectorInstrumentModelRsp" extends="ResponseMessage" messageId="120">
+		<Attribute name="instruments" type="Instrument" array="[]"/>
+	</Message>
+	
+
+	<Message name="PriceCollectorReplayStartedBdx" extends="PriceCollectorBdx" messageId="121">
+		<Attribute name="symbol" type="String"/>
+		<Attribute name="flowtype" type="String"/>   <!-- ALL, QUOTES or TRADES -->
+	</Message>
+	
+	<Message name="PriceCollectorReplayStoppedBdx" extends="PriceCollectorBdx" messageId="122">
+		<Attribute name="symbol" type="String"/>
+		<Attribute name="flowtype" type="String"/>   <!-- ALL, QUOTES or TRADES -->
+	</Message>
+
+	<!-- =============================================================================
+	++ ATClient message used to control and manage server process and strategies within the StrategyEngine 
+	============================================================================ -->
+	
+	<Message name="PLPosition">
+		<Attribute name="strategyId" type="String"/>
+		<Attribute name="plUnitId" type="String"/>
+		<Attribute name="plUnitState" type="String"/>
+		<Attribute name="strategyState" type="String"/>
+		<Attribute name="strategyInfo" type="String"/>
+		<Attribute name="symbol" type="String"/>
+		<Attribute name="xmState" type="String"/>
+		<Attribute name="netPosition" type="int"/>
+		<Attribute name="mpl" type="double"/>
+		<Attribute name="upl" type="double"/>
+		<Attribute name="cost" type="double"/>
+		<Attribute name="nrTrades" type="int"/>
+	</Message>
+	
+	<Message name="PLUnit">
+		<Attribute name="id" type="String"/>
+		<Attribute name="plUnitState" type="String"/>
+		<Attribute name="startTime" type="String"/>
+		<Attribute name="pollTime" type="String"/>
+		<Attribute name="positions" type="PLPosition" array="[]"/>
+	</Message>
+	
+	<Message name="PLStrategy">
+		<Attribute name="strategyId" type="String"/>
+		<Attribute name="loaded" type="boolean"/>
+		<Attribute name="plUnits" type="PLUnit" array="[]"/>
+	</Message>
+	
+	<Message name="QueryStrategiesReq"  extends="RequestMessage" messageId="200">
+	</Message> 
+	
+	<Message name="QueryStrategiesRsp" extends="ResponseMessage" messageId="201">
+		<Attribute name="matcher" type="String"/>
+		<Attribute name="strategies" type="PLStrategy" array="[]"/>
+	</Message> 
+	
+	<!-- updated May 6, 2014 pa -->		
+	<Message name="PLStrategiesStatusBdx"  extends="UpdateMessage" messageId="202">
+		<Constants>
+			<Constant type="int" name="MarketDisconnected" value="1"/>
+			<Constant type="int" name="MarketConnected" value="2"/>
+			<Constant type="int" name="MarketOffline" value="3"/>
+		</Constants>
+		
+		<Attribute name="strategies" type="PLStrategy" array="[]"/>
+		<Attribute name="market" type="String"/>
+		<Attribute name="Connected" type="int"/>
+	</Message> 
+	
+	<Message name="LoadStrategyReq" messageId="203">
+		<Attribute name="strategy" type="String"/>
+	</Message> 
+
+	<Message name="LoadStrategyRsp" extends="ResponseMessage" messageId="204">
+		<Attribute name="strategy" type="String"/>
+	</Message>
+	
+	<Message name="PLUnitMgmtReq" messageId="205">
+		<Constants>
+			<Constant type="int" name="START" value="1"/>
+			<Constant type="int" name="HALT" value="2"/>
+			<Constant type="int" name="SHUT" value="3"/>
+		</Constants>
+		
+		<Attribute name="strategyId" type="String"/>
+		<Attribute name="mgmtCode" type="int"/>
+		<Attribute name="all" type="boolean"/>
+		<Attribute name="plUnitIds" type="String" array=""/>
+	</Message>
+	
+	<Message name="PLUnitMgmtRsp" extends="ResponseMessage" messageId="206">
+		<!-- Copy of request -->
+		<Attribute name="strategyId" type="String"/>
+		<Attribute name="mgmtCode" type="int"/>
+		<Attribute name="all" type="boolean"/>
+		<Attribute name="plUnitIds" type="String" array=""/>
+	</Message>
+	
+	<Message name="UnloadStrategyReq" messageId="207">
+	      <Attribute name="strategy" type="String"/>
+	</Message>
+	<Message name="UnloadStrategyRsp" extends="ResponseMessage" messageId="208">
+	      <Attribute name="strategy" type="String"/>
+	</Message>
+	
+	<Message name="PLUnitBdx" messageId="209">
+		<Attribute name="plUnits" type="PLUnit" array="[]"/>
+	</Message>
+	
+	<!-- -
+	++ Manual order operations messages from the TradingClient to 
+	++ to the OrderTestStrategy
+	-->
+	<Message name="ManualTestAddOrderReq"  extends="RequestMessage" messageId="214">
+		<Constants>
+			<Constant name="ACTION_SELL" type="String" value="Sell"/>
+			<Constant name="ACTION_BUY" type="String" value="Buy"/>
+			<Constant name="TIME_IOC" type="String" value="IOC"/>
+			<Constant name="ACTION_EOD" type="String" value="EOD"/>
+		</Constants>
+	    <Attribute name="symbol" type="String"/>
+		<Attribute name="price" type="double"/>
+		<Attribute name="volume" type="int"/>
+		<Attribute name="action" type="String"/>	<!--  Buy / Sell --> 
+		<Attribute name="ownReference" type="String"/>
+		<Attribute name="reason" type="String"/>
+		<Attribute name="timeCondition" type="String"/>
+	</Message>
+	
+	<Message name="ManualTestAddOrderRsp" extends="ResponseMessage" messageId="215">
+		<Attribute name="ownReference" type="String"/>
+	</Message>
+	
+	
+	
+     <Message name="ManualTestCancelOrderReq"  extends="RequestMessage" messageId="216">
+		<Attribute name="orderId" type="String"/>	
+		<Attribute name="ownReference" type="String"/>
+	</Message>
+	
+	<Message name="ManualTestCancelOrderRsp" extends="ResponseMessage" messageId="217">
+	   <Attribute name="ownReference" type="String"/>
+	</Message>
+	
+	
+	<Message name="ManualOpenPositionReq"  extends="RequestMessage" messageId="218">
+		<Attribute name="symbol" type="String"/>	
+		<Attribute name="reason" type="String"/>	
+		<Attribute name="price" type="double"/>
+		<Attribute name="timeOutInSec" type="long"/>
+		<Attribute name="position" type="int"/>
+	</Message>
+	
+	<Message name="ManualOpenPositionRsp" extends="ResponseMessage" messageId="219">
+	</Message>
+	
+	
+	<Message name="ManualClosePositionReq"  extends="RequestMessage" messageId="220">
+		<Attribute name="symbol" type="String"/>	
+		<Attribute name="reason" type="String"/>	
+		<Attribute name="price" type="double"/>
+		<Attribute name="timeOutInSec" type="long"/>
+		<Attribute name="finalClose" type="boolean"/>
+	</Message>
+	
+	<Message name="ManualClosePositionRsp" extends="ResponseMessage" messageId="221">
+	</Message>
+	
+	
+	
+	
+	<!-- =============================================================================
+	++ General Status event from server to ATClient 
+	============================================================================ -->
+	<Message name="StatusEvent">
+		<Constants>
+			<Constant type="int" name="Information" value="0"/>
+			<Constant type="int" name="Error" value="2"/>
+		</Constants>
+		<Attribute name="server" type="String"/>	
+		<Attribute name="source" type="String"/>
+		<Attribute name="severity" type="int"/>
+		<Attribute name="timestamp" type="long"/> <!--  HH:mm:ss.SSS -->
+		<Attribute name="message" type="String"/>
+		<Code>
+			public String getSeverityString() 
+			{
+				if (mSeverity == StatusEvent.Information) {
+				   return "Information";
+				}
+				if (mSeverity == StatusEvent.Error) {
+				   return "Error";
+				}
+				return "Severity:" + String.valueOf( mSeverity);
+			}	
+			
+			public String getTimestampString() {
+			  java.text.SimpleDateFormat tSDT = new java.text.SimpleDateFormat("HH:mm:ss.SSS");
+			  return tSDT.format( mTimestamp );
+			}
+		</Code>
+	</Message>
+	
+	<Message name="QueryStatusEventsReq"  extends="RequestMessage" messageId="300">
+	</Message>
+	
+	<Message name="QueryStatusEventsRsp" extends="ResponseMessage" messageId="301">
+		<Attribute name="events" type="StatusEvent" array="[]"/>
+	</Message>
+	
+	<Message name="StatusEventsBdx"  extends="UpdateMessage" messageId="302">
+		<Attribute name="event" type="StatusEvent"/>
+	</Message>
+	
+	
+	
+	<!-- =============================================================================
+	++ Strategy Server Messages
+	============================================================================ -->
+	
+	
+	<Message name="StrategyServer_QueryOwnTradesReq"  extends="RequestMessage" messageId="400">
+	</Message> 
+	
+	<Message name="StrategyServer_OwnTrade">
+		<Attribute name="action" type="String"/> <!--  Buy or Sell -->
+		<Attribute name="symbol" type="String"/>
+		<Attribute name="price" type="double"/>
+		<Attribute name="volume" type="int"/>
+		<Attribute name="strategyId" type="String"/>
+		<Attribute name="orderId" type="String"/>
+		<Attribute name="tradeId" type="String"/>
+		<Attribute name="ownReference" type="String"/>
+		<Attribute name="createTime" type="long"/> <!--  HH:mm:ss.SSS -->
+		<Attribute name="userExt" type="NameValueList"/>
+	</Message>
+	
+	<Message name="StrategyServer_QueryOwnTradesRsp" extends="ResponseMessage" messageId="401">
+	    <Attribute name="trades" type="StrategyServer_OwnTrade" array="[]"/>
+	</Message> 
+	
+		<Message name="StrategyServer_QueryOwnOrdersReq"  extends="RequestMessage" messageId="402">
+	</Message> 
+	
+	<Message name="StrategyServer_OwnOrder">
+		<Constants>
+			<Constant type="String" name="LMT" value="LMT"/>
+			<Constant type="String" name="MKT" value="MKT"/>
+			<Constant type="String" name="STP" value="STP"/>
+		</Constants>
+		<Attribute name="orderType" type="String"/>
+		<Attribute name="symbol" type="String"/>
+		<Attribute name="price" type="double"/>
+		<Attribute name="initialVolume" type="int"/>
+		<Attribute name="currentVolume" type="int"/> <!--  set by matcher -->
+		<Attribute name="strategyId" type="String"/>
+		<Attribute name="orderId" type="String"/> <!--  set by matcher -->
+		<Attribute name="createTime" type="long"/> 
+		<Attribute name="action" type="String"/>	<!--  Buy / Sell --> 
+		<Attribute name="errorStatus" type="String"/>
+		<Attribute name="ownReference" type="String"/>
+		<Attribute name="active" type="boolean"/>
+		<Attribute name="reason" type="String"/>
+		<Attribute name="timeCondition" type="String"/> <!--  IOC or EOD -->
+        <Attribute name="subState" type="String"/> <!--  set by matcher == ATCI state -->
+        <Attribute name="userExt" type="NameValueList"/>
+        <Attribute name="triggered" type="boolean"/>
+	</Message>
+	
+	<Message name="StrategyServer_QueryOwnOrdersRsp" extends="ResponseMessage" messageId="403">
+	    <Attribute name="orders" type="StrategyServer_OwnOrder" array="[]"/>
+	</Message> 
+	
+	<Message name="StrategyServer_OwnOrderBdx"  extends="UpdateMessage" messageId="404">
+	    <Attribute name="order" type="StrategyServer_OwnOrder"/>
+	</Message> 
+	
+	<Message name="StrategyServer_OwnTradeBdx"  extends="UpdateMessage" messageId="405">
+	    <Attribute name="trade" type="StrategyServer_OwnTrade"/>
+	</Message> 
+	
+	<!-- =============================================================================
+	++ Strategy Server Messages
+	============================================================================ -->
+	<Message name="RiskController_ValidateOrderReq"  extends="RequestMessage" messageId="500">
+		<Attribute name="requestId" type="String"/>
+	    <Attribute name="order" type="StrategyServer_OwnOrder"/>
+	</Message>
+	
+	<Message name="RiskController_ValidateOrderRsp" extends="ResponseMessage" messageId="501">
+		<Attribute name="requestId" type="String"/>
+	</Message> 
+	
+	<Message name="RiskController_PositionStatus"  extends="UpdateMessage" >
+		<Attribute name="symbol" type="String"/>
+		<Attribute name="position" type="int"/>
+		<Attribute name="lastTradePrice" type="double"/>
+		<Attribute name="exposure" type="double"/>
+		<Attribute name="orders" type="int"/>
+		<Attribute name="trades" type="int"/>
+		<Attribute name="profitAndLoss" type="double"/>
+		<Attribute name="unmatchedProfitAndLoss" type="double"/>
+	</Message>
+	
+	<Message name="RiskController_PositionStatusBdx"  extends="UpdateMessage" messageId="502">
+		<Attribute name="totalExposure" type="double"/>
+		<Attribute name="positions" type="RiskController_PositionStatus" array="[]"/>
+	</Message>
+	 
+	
+	<!-- =============================================================================
+	++ Generic AppServer messages
+	============================================================================ -->
+
+	<Message name="GetAllVariablesReq"  extends="RequestMessage" messageId="600">
+	</Message>
+	
+	<Message name="GetAllVariablesRsp" extends="ResponseMessage" messageId="601">
+		<Attribute name="name" type="String" array="[]"/>
+		<Attribute name="value" type="String" array="[]"/>
+	</Message>
+	
+	<Message name="GetVariableReq"  extends="RequestMessage" messageId="602">
+		<Attribute name="name" type="String" />
+	</Message>
+
+	<Message name="GetVariableRsp" extends="ResponseMessage" messageId="603">
+		<Attribute name="name" type="String"/>
+		<Attribute name="value" type="String"/>
+	</Message>
+
+	<Message name="SetVariableReq"  extends="RequestMessage" messageId="604">
+		<Attribute name="name" type="String"/>
+		<Attribute name="value" type="String"/>
+	</Message>
+
+	<Message name="SetVariableRsp" extends="ResponseMessage" messageId="605">
+		<Attribute name="name" type="String"/>
+		<Attribute name="value" type="String"/>
+	</Message>
+	
+	<Message name="SubscribeVariableReq"  extends="RequestMessage" messageId="606">
+		<Attribute name="name" type="String"/>
+	</Message>
+	
+	<Message name="SubscribeVariableRsp" extends="ResponseMessage" messageId="607">
+		<Attribute name="name" type="String"/>
+	</Message>
+	
+	<Message name="SubscribeAllVariablesReq"  extends="RequestMessage" messageId="608">
+	</Message>
+	
+	<Message name="SubscribeAllVariablesRsp" extends="ResponseMessage" messageId="609">
+	</Message>
+
+	<Message name="VariableBdx"  extends="UpdateMessage" messageId="610">
+		<Attribute name="name" type="String"/>
+		<Attribute name="value" type="String"/>
+	</Message>
+	
+</Messages>

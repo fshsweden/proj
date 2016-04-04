@@ -1,0 +1,12 @@
+/* CSS declarations go here */
+
+.left {
+    background-color: cornflowerblue;
+    color: aliceblue;
+}
+
+.main {
+    background-color: aliceblue;
+    color: lightslategray;
+}
+

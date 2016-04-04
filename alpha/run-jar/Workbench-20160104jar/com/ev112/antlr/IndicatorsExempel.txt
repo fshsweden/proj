@@ -1,0 +1,58 @@
+// Indicator example
+
+// Definierar konstanter som kan användas på alla ställen där man ska ha ett värde
+// Värdet kan antingen komma från scriptet (typ 123 nedan) eller från strategin via
+// nyckelorder "STRATEGY"
+CONSTANTS {
+	Double	MACD_LONG_EMA = 123;
+	Boolean SOME_BOOL = STRATEGY;  			// Looks up parameter 'SOME_BOOL' from the strategy
+} 
+
+//  Indicators räknar ut värden vid varje candle
+//  En indicator har en datatyp (Boolean, Double och kanske fler sen)
+//  Man deklarerar variabler likt i Java och man instantierar indikatorer.
+//  "Evaluatorn/parsern" vet vilka indikatorer som finns, dvs den känner t.ex. till MACDValue osv 
+
+INDICATORS {								// Uträknade värden, varje candle
+											// MACDValue och antal parametrar osv måste matcha implementationen
+											// "Evaluatorn" vet om dessa metoder/klasser
+
+	Double macdValue1 = new MACDValue(MACD_LONG_EMA, 26, 12);
+	Double macdValue2 = new MACDValue(MACD_SHORT_EMA, 12, 9);
+	
+	Double macdSignal = new MACDSignal(MACD_LONG_EMA, 26, 12);
+	
+	Double maxInHistory = new MaxInHistory(macdSignal, 12);
+	
+	Boolean isGreater = new IsGreater(...);
+	
+	Boolean posSwitch = new SwitchedToPositive(prev, macdDiff);
+	
+	.... 	
+		
+}
+
+// Rules opererar på villkorsuttryck och det finns förslagsvis fyra RULES
+
+RULES {
+
+	UP {
+			posSwitch == true && isGreater == true;		
+	}
+	
+	UP-EXIT {
+			...
+	}
+		
+	DOWN {
+			posSwitch == false && isGreater == true;
+	}
+	
+	DOWN-EXIT {
+			...
+	}
+	
+}
+	
+	
+	
