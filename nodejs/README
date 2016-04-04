@@ -1,0 +1,13 @@
+This is a proof-of-concept test of a web service written in NODE.JS
+
+The client is also written in plain NODE.JS
+
+
+
+MyApp is a server that can deal with REST calls on URL /price 
+
+Client/client.js is a node client that will issue a http.request with POST and
+after that write some JSON data.
+
+MyApp is configured to reset data (option "3") between runs.
+
