@@ -18,8 +18,8 @@ public class Main implements Observer {
 
 	public Main() {
 
-		// online();
-		demo();
+		online();
+		// demo();
 	}
 	
 	private void online() {
@@ -65,9 +65,16 @@ public class Main implements Observer {
 						System.out.println("Created JSON:" + s2);
 						
 						objArray[0] = s2;
-						client.call("updateProduct", objArray);
+						if (client.call("updateProduct", objArray) == null) {
+							System.out.println("No connection, retrying in 15 secs:" + s2);
+							Thread.sleep(15000);
+							client.reconnect();
+						};
 					}
 					catch (JSONException ex) {
+						System.out.println("JSON EXCEPTION:" + ex.getLocalizedMessage());
+					}
+					catch (Exception ex) {
 						System.out.println("EXCEPTION:" + ex.getLocalizedMessage());
 					}
 				}
@@ -120,7 +127,11 @@ public class Main implements Observer {
 				System.out.println("Created JSON:" + s2);
 				
 				objArray[0] = s2;
-				client.call("updateProduct", objArray);
+				if (client.call("updateProduct", objArray) == null) {
+					System.out.println("No connection, retrying in 15 secs:" + s2);
+					Thread.sleep(15000);
+					client.reconnect();
+				}
 				
 				Thread.sleep(5000);
 			}

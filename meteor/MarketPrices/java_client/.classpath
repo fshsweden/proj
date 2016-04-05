@@ -6,7 +6,7 @@
 	<classpathentry kind="lib" path="lib/java-ddp-client.jar"/>
 	<classpathentry kind="lib" path="lib/java-json.jar"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/AlphaTrading"/>
-	<classpathentry kind="lib" path="/Users/peterandersson/proj/alpha/AlphaTrading/lib/IB-api-972-beta-feb03-1.4.jar"/>
-	<classpathentry kind="lib" path="/Users/peterandersson/proj/alpha/AlphaTrading/lib/mytrade-1.6.jar"/>
+	<classpathentry kind="lib" path="/Users/peterandersson/alpha/AlphaTrading/lib/IB-api-972-beta-feb03-1.4.jar"/>
+	<classpathentry kind="lib" path="/Users/peterandersson/alpha/AlphaTrading/lib/mytrade-1.6.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

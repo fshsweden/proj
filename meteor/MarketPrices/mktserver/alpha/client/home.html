@@ -1,0 +1,28 @@
+<template name="home">
+        <table class="price_table">
+            <tr>
+                <th>Name</th>
+                <th>BQty</th>
+                <th>Bid</th>
+                <th>Ask</th>
+                <th>AQty</th>
+                <th>Last</th>
+                <th>LQty</th>
+                <th>Volume</th>
+            </tr>
+            {{#each prices}}
+                <tr id="{{_id}}">
+                    <td id="{{_id}}-name">{{name}}</td>
+                    <td id="{{_id}}-bidqty">{{bidqty}}</td>
+                    <td id="{{_id}}-bid">{{bid}}</td>
+                    <td id="{{_id}}-ask">{{ask}}</td>
+                    <td id="{{_id}}-askqty">{{askqty}}</td>
+                    <td id="{{_id}}-last">{{last}}</td>
+                    <td id="{{_id}}-lastqty">{{lastqty}}</td>
+                    <td id="{{_id}}-volume">{{volume}}</td>
+                </tr>
+                
+            {{/each}}
+        </table>
+
+</template>

@@ -1,0 +1,22 @@
+
+<template name="ApplicationLayout">
+
+    <div class="container-fluid">
+        <div class="row">
+        
+        <div class="hidden-xs hidden-sm col-md-3 no-float left">
+            {{> yield 'Left'}}
+        </div>
+        <div class="col-xs-12 col-sm-12 col-md-9 no-float main">
+            {{> yield 'Main'}}
+        </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <p class="text-muted">Place sticky footer content here.</p>
+        </div>
+    </footer>
+
+</template>

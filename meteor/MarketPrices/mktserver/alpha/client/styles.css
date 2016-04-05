@@ -1,0 +1,54 @@
+BODY {
+  background-color: antiquewhite;
+  color: gray; }
+
+.left {
+  /* background-color: cadetblue; */
+  color: antiquewhite;
+  height: 100%; }
+
+.price_table {
+  font-size: 2em; }
+  .price_table tr th {
+    padding: 10px; }
+  .price_table td {
+    padding: 10px; 
+    text-align: right;
+  }
+
+/* Sticky footer styles
+-------------------------------------------------- */
+html {
+  position: relative;
+  min-height: 100%; }
+
+body {
+  /* Margin bottom by footer height */
+  margin-top: 60px;
+  margin-bottom: 60px; }
+
+.footer {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  /* Set the fixed height of the footer here */
+  height: 60px;
+  background-color: #f5f5f5; }
+
+/* Custom page CSS
+-------------------------------------------------- */
+/* Not required for template or sticky footer method. */
+body > .container {
+  padding: 60px 15px 0; }
+
+.container .text-muted {
+  margin: 20px 0; }
+
+.footer > .container {
+  padding-right: 15px;
+  padding-left: 15px; }
+
+code {
+  font-size: 80%; }
+
+/*# sourceMappingURL=styles.css.map */
